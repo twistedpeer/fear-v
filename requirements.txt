@@ -1,0 +1,7 @@
+django
+django-debug-toolbar
+lxml
+matplotlib
+XlsxWriter
+pyyaml
+psycopg2-binary

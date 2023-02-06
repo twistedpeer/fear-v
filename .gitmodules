@@ -1,0 +1,9 @@
+[submodule "tools/isa-toolkit"]
+	path = tools/isa-toolkit
+	url = ../fear-v-analysis.git
+[submodule "tools/qemu"]
+	path = tools/qemu
+	url = ../fear-v-qemu.git
+[submodule "tools/fe300-swgen"]
+	path = tools/fe300-swgen
+	url = ../fear-v-fe300-swgen.git

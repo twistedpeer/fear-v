@@ -1,0 +1,363 @@
+#!/usr/bin/env python3
+import argparse
+import os
+from pathlib import Path
+import sys
+import yaml
+import math
+from multiprocessing import Process, Pool, set_start_method
+if not 'FEAR_V_DIR' in os.environ:
+    print("ERROR: Need to source 'sourceme.sh' first!")
+    exit(1)
+
+import django
+from django import db
+os.environ['DJANGO_SETTINGS_MODULE'] = 'app_main.settings'
+django.setup()
+from webapp.models import *
+from webapp.utils import analyze_hwcoverage
+from abc import ABCMeta, abstractmethod
+
+def expand_path(path, basedir):
+    if path == None:
+        return None
+    if not os.path.isabs(path):
+        return Path(os.path.join(basedir, path))
+    return Path(path)
+
+class Settings:
+    def __init__(self, gcc, qemu, yml, basedir=None, makedir=None):
+        self.basedir = basedir
+        self.makedir = makedir
+        self.gcc = Settings.Gcc(**gcc)
+        self.qemu = Settings.Qemu(**qemu)
+
+        if self.basedir == None:
+            print("ERROR: settings.basedir not specified")
+            exit(1)
+        elif not os.path.isdir(self.basedir) and self.basedir != "/!THIS!/":
+            print("ERROR: settings.basedir must point to a directory or set to '/!THIS!/'")
+            print("       which will use the directory that contains the YAML script.")
+            exit(1)
+        if self.basedir == "/!THIS!/":
+            print("INFO: updated settings.basedir to the folder containing the YAML script.")
+            self.basedir = os.path.dirname(os.path.abspath(yml))
+
+        self.makedir = expand_path(self.makedir, self.basedir)
+        self.qemu.testsetup = expand_path(self.qemu.testsetup, self.basedir)
+
+    class Gcc:
+        def __init__(self, march, mabi):
+            self.march = march
+            self.mabi = mabi
+
+    class Qemu(yaml.YAMLObject):
+        def __init__(self, machine, cpu, testsetup, terminator):
+            self.machine = machine
+            self.cpu = cpu
+            self.testsetup = testsetup
+            self.terminator = terminator
+
+class Hardware:
+    def __init__(self, name, core, soc, extra_faults_from_cla, 
+                 max_faults_gpr, max_faults_csr, max_faults_imem, max_faults_coremem, max_faults_ifr,
+                 settings):
+        self.name = name
+        self.core = Hardware.Core(**core)
+        self.soc = soc
+        self.max_faults_gpr = max_faults_gpr
+        self.max_faults_csr = max_faults_csr
+        self.max_faults_imem = max_faults_imem
+        self.max_faults_coremem = max_faults_coremem
+        self.max_faults_ifr = max_faults_ifr
+        self.extra_faults_from_cla = expand_path(extra_faults_from_cla, settings.basedir)
+
+    class Core:
+        def __init__(self, subsets, privileged):
+            self.subsets = subsets
+            self.privileged = privileged
+
+class SoftwareBase(object):
+    __metaclass__ = ABCMeta
+
+    @abstractmethod
+    def __init__(self, name, type):
+        self.name = name
+        self.type = type
+
+class SoftwareImport(SoftwareBase):
+    def __init__(self, name, type, files, settings):
+        super().__init__(name, type)
+
+        elf_all = []
+        if files != None:
+            for f in [expand_path(x, settings.basedir) for x in files]:
+                if f.is_dir():
+                    elf_all.extend(sorted(f.rglob("*.elf")))
+                else:
+                    elf_all.append(f)
+        self.files = [f for f in elf_all]
+
+class SoftwareGenerate(SoftwareBase):
+    __metaclass__ = ABCMeta
+
+    @abstractmethod
+    def __init__(self, name, type, tool, nametemplate, directory, count, settings):
+        super().__init__(name, type)
+        self.tool = tool
+        self.nametemplate = nametemplate
+        self.directory = expand_path(directory, settings.basedir)
+        self.count = int(count)
+
+class SoftwareGenerateCsmith(SoftwareGenerate):
+    def __init__(self, name, type, tool, nametemplate, directory, count, csmith_flags, settings):
+        super().__init__(name, type, tool, nametemplate, directory, count, settings)
+        self.csmith_flags = csmith_flags
+
+class SoftwareGenerateTorture(SoftwareGenerate):
+    def __init__(self, name, type, tool, nametemplate, directory, count, torture_config, torture_isa, settings):
+        super().__init__(name, type, tool, nametemplate, directory, count, settings)
+        self.torture_config = expand_path(torture_config, settings.basedir)
+        self.torture_isa = torture_isa
+
+class Mutants:
+    def __init__(self, gpr, csr, ifr, imem, coremem, with_flip, with_stuckat, with_transient_faults, bits, settings):
+    # def __init__(self, gpr, csr, ifr, imem, coremem, with_flip, with_stuckat, settings):
+        self.gpr = gpr
+        self.csr = csr
+        self.ifr = ifr
+        self.imem = imem
+        self.coremem = coremem
+        self.with_flip = with_flip
+        self.with_stuckat = with_stuckat
+        self.with_transient_faults = with_transient_faults
+        # self.bits = bits
+
+def init_architecture(arch, gcc, qemu, basedir):
+    if not Architecture.objects.filter(name=arch.name).exists():
+        return Architecture.objects.create(
+            name=arch.name,
+            march=gcc.march, mabi=gcc.mabi,
+            qemu_machine=qemu.machine,
+            qemu_cpu=qemu.cpu,
+            qemu_testsetup=qemu.testsetup,
+            qemu_terminator=qemu.terminator,
+            subsets=arch.core.subsets,
+            privileged=[p for p in arch.core.privileged if p != "M-mode"],
+            system=arch.soc,
+            max_faults_gpr=arch.max_faults_gpr,
+            max_faults_csr=arch.max_faults_csr,
+            max_faults_imem=arch.max_faults_imem,
+            max_faults_coremem=arch.max_faults_coremem,
+            max_faults_ifr=arch.max_faults_ifr,
+            extra_faults_from_cla=arch.extra_faults_from_cla)
+    else:
+        return Architecture.objects.get(name=arch.name)
+
+def init_softwarelist(n, prefix):
+    slist, created = SoftwareList.objects.get_or_create(name="{}{}".format(prefix, n))
+    # if not created:
+    #     print("Softwarelist '{}' already exists. Delete all contained software.".format(slist_name))
+    #     for s in slist.software.all():
+    #         s.delete()
+    return slist
+
+def import_existing_software(slist, arch, swl, settings, prefix):
+    # Create the software object
+    i = 1
+    count = len(swl.files)
+    for elf in swl.files:
+        print("              * {}/{} *   {}".format(i, count, elf.stem))
+        s, c = Software.objects.get_or_create(arch=arch, name="{}{}".format(prefix, elf.stem), generator="none")
+        s.elf.save(elf.name, File(open(str(elf), "rb")))
+        slist.software.add(s)
+        i += 1
+
+def generate(slist, arch, swl, settings, prefix):
+    for i in range(swl.count):
+        digits = 1
+        if swl.count > 0:
+            digits = math.ceil(math.log10(swl.count))
+        dig_fmt = ":0{}d".format(digits)
+        fmt_str = "              * {idx" + dig_fmt + "}/{count" + dig_fmt + "} *   {name}"
+
+        n = prefix + swl.nametemplate.format(i)
+        print(fmt_str.format(idx=int(i+1), count=int(swl.count), name=n))
+        tool = swl.tool
+        d = expand_path(swl.directory, settings.basedir)
+        cmd = "make -s -C '{}' {} OUT_DIR='{}' PROGRAM={}".format(settings.makedir, tool, d, n)
+        if tool == "riscv-torture":
+            cmd += " TORTURE_CONFIG={}".format(expand_path(swl.torture_config, settings.basedir))
+            cmd += " TORTURE_ISA={}".format(swl.torture_isa)
+            srcname = "{}.S".format(n)
+        elif tool == "csmith":
+            cmd += " CSMITHFLAGS=\"{}\"".format(swl.csmith_flags)
+            srcname = "{}.c".format(n)
+        os.system(cmd)
+
+        elfname = "{}.elf".format(n)
+        elffullpath = "{}/{}".format(d, elfname)
+        srcfullpath = "{}/{}".format(d, srcname)
+        s, c = Software.objects.get_or_create(arch=arch, name=n, generator=tool)
+        s.elf.save(elfname, File(open(str(elffullpath), "rb")))
+        s.src.save(srcname, File(open(str(srcfullpath), "rb")))
+        slist.software.add(s)
+
+def parallel_simulate(sw_id):
+    global mutants
+    global y
+    global uncov_gprs
+    global uncov_csrs
+    global uncov_insns
+    db.connection.close()
+
+    s = Software.objects.get(pk=sw_id)
+    if y["steps"]["goldenrun-analysis"] == True:
+        print("Running Golden Run Analysis for '{}'".format(s.name))
+        s.gen_lst()
+        analyze_hwcoverage(s)
+
+        # Decide whether to keep or to ignore/delete current sw...
+        s_gprs = Gpr.objects.filter(pk__in=s.gprcoverage.values_list("register", flat=True))
+        s_csrs = Csr.objects.filter(pk__in=s.csrcoverage.values_list("register", flat=True))
+        s_insns = Instruction.objects.filter(pk__in=s.instructioncoverage.values_list("instruction", flat=True))
+        new_gprs = uncov_gprs.intersection(s_gprs)
+        new_csrs = uncov_csrs.intersection(s_csrs)
+        new_insns = uncov_insns.intersection(s_insns)
+        print("  - # Candidates for '{}' -> GPR = {} / CSR = {} / INSN = {}".format(s.name, len(new_gprs), len(new_csrs), len(new_insns)))
+        if len(new_gprs) == 0 and len(new_csrs) == 0 and len(new_insns) == 0:
+            print("  - SKIP AND DELETE SW '{}' as there are no new candidates!".format(s.name))
+            s.delete()
+            return
+
+    if y["steps"]["create-mutants"] == True:
+        # print("Generating MutantList for '{}'".format(s.name))
+        # print(mutants.extra_faults_from_cla)
+        ml = MutantList.objects.create(software=s, 
+                                with_gpr=mutants.gpr,
+                                with_csr=mutants.csr,
+                                with_ifr=mutants.ifr,
+                                with_imem=mutants.imem,
+                                with_coremem=mutants.coremem,
+                                with_flip_faults=mutants.with_flip,
+                                with_stuckat_faults=mutants.with_stuckat,
+                                with_transient_faults=mutants.with_transient_faults)
+                                # bits=mutants.bits)
+
+    if y["steps"]["simulate-mutants"] == True:
+        ml = s.mutantlist
+        print("  - SIMULATE sw '{}' (#Mutants: {})".format(s.name, ml.mutants.count()))
+        ml.run_tests(verbose=False)
+        ml.read_results()
+
+def run_yml(yml, prefix):
+    global mutants
+    global y
+    global uncov_gprs
+    global uncov_csrs
+    global uncov_insns
+    with open(yml, "r") as stream:
+        try:
+            # YAML Parse...
+            y = yaml.safe_load(stream)
+
+            settings = Settings(**y["settings"], yml=yml)
+            hardware = Hardware(**y["hardware"], settings=settings)
+            software = []
+            if "software" in y:
+                software_import = [SoftwareImport(**x, settings=settings) for x in y["software"] if x["type"] == "import"]
+                software_csmith = [SoftwareGenerateCsmith(**x, settings=settings) for x in y["software"] if x["type"] == "generate" and x["tool"] == "csmith"]
+                software_torture = [SoftwareGenerateTorture(**x, settings=settings) for x in y["software"] if x["type"] == "generate" and x["tool"] == "riscv-torture"]
+                software = [*software_import, *software_csmith, *software_torture]
+
+            # Step 0: Init/clear database
+            if y["steps"]["init-database"] == True:
+                print("--------------------------------------------------------------------------------")
+                print("[STEP DB-0]     Resetting django and postgresql")
+                os.system("init_database > /dev/null")
+
+                # Step 1: Create the django architecture (hardware)
+                print("--------------------------------------------------------------------------------")
+                print("[STEP DB-1]     Setting up django hardware model")
+                a = init_architecture(hardware, settings.gcc, settings.qemu, settings.basedir)
+
+                # Step 2: Calculate faults
+                # if y["steps"]["calculate-faults"] == True:
+                print("--------------------------------------------------------------------------------")
+                print("[STEP DB-2]     Calculating django fault-effects")
+                os.system("calculate_faults.py -a {} -j {} -b {}".format(a.name, os.cpu_count(), a.max_faults_imem))
+            else:
+                a = Architecture.objects.get(name=hardware.name)
+
+            (_, uncov_gprs, uncov_csrs, uncov_insns) = a.uncovered_faults()
+
+            # Step 3: Software
+            for swl in software:
+
+                # a) Create software list
+                print("--------------------------------------------------------------------------------")
+                print("[STEP SW-1]   Create or retrieve SoftwareList '{}{}'".format(prefix, swl.name))
+                l = init_softwarelist(swl.name, prefix)
+
+                # b) Import existing software
+                if swl.type == "import":
+                    print("[STEP SW-2]   Importing existing software")
+                    import_existing_software(l, a, swl, settings, prefix)
+
+                # c) Run code generator
+                if swl.type == "generate":
+                    print("[STEP SW-2]   Generating software")
+                    generate(l, a, swl, settings, prefix)
+
+            print("--------------------------------------------------------------------------------")
+
+            # Step 4: Mutation and fault simulation
+            all_sw = []
+            for swl in software:
+                l = SoftwareList.objects.get(name="{}{}".format(prefix, swl.name))
+                all_sw.extend(list(l.software.all().values_list("pk", flat=True).distinct()))
+
+            all_sw = set(all_sw)
+            nProc = min(os.cpu_count(), len(all_sw))
+            if nProc > 0:
+                # Only parse mutants from yaml if we are actually fault simulating...
+                mutants = Mutants(**y["mutants"], settings=settings)
+                with Pool(processes=nProc) as pool:
+                    pool.map_async(parallel_simulate, all_sw)
+                    pool.close()
+                    pool.join()
+            
+                print("--------------------------------------------------------------------------------")
+                db.connection.close()
+                faults2_all = set(a.all_faults())
+                (uncov2_all, _, _, _) = a.uncovered_faults()
+                cov2_all = faults2_all - uncov2_all
+                print(" Covered faults   ({} / {})".format(len(cov2_all), len(faults2_all)))
+                print(" -------------------------------------------------------------------------------")
+                for cov in sorted(cov2_all):
+                    print("   ++> {}".format(cov))
+                print("--------------------------------------------------------------------------------")
+                print(" Uncovered faults ({} / {})".format(len(uncov2_all), len(faults2_all)))
+                print(" -------------------------------------------------------------------------------")
+                for uncov in sorted(uncov2_all):
+                    print("   --> {}".format(uncov))
+                print("--------------------------------------------------------------------------------")
+
+
+        except yaml.YAMLError as exc:
+            print(exc)
+
+def main():
+    parser = argparse.ArgumentParser(description='Run FEAR5 YAML script.')
+    parser.add_argument('script', metavar='yml', type=str, 
+                        help='the YAML configuration file')
+    parser.add_argument('-prefix', metavar='prefix', type=str, default="",
+                        help='optional prefix for softwarelist and software names')
+
+    args = parser.parse_args()
+
+    set_start_method("fork")
+    run_yml(args.script, args.prefix)
+
+if __name__ == "__main__":
+    main()

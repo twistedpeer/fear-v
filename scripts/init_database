@@ -1,0 +1,18 @@
+#!/bin/bash
+
+# Delete django storage
+rm -rf $FEAR_V_FILES_DIR/
+mkdir -p $FEAR_V_FILES_DIR/
+
+# Drop current django database, recreate and grant privileges...
+#sudo mysql -u root -e "drop database if exists django; create database django; grant all privileges on django.* to 'django'@'localhost'; flush privileges;"
+#sudo -u postgres psql -c "DROP DATABASE IF EXISTS django WITH (FORCE);" -c "CREATE DATABASE django OWNER django;"
+psql postgres -c "DROP DATABASE IF EXISTS django WITH (FORCE);" -c "CREATE DATABASE django OWNER django;"
+
+# Initialize django database
+cd $FEAR_V_DIR/tools/isa-toolkit
+rm -rf $FEAR_V_DIR/tools/isa-toolkit/webapp/migrations/*
+rm -rf $FEAR_V_DIR/tools/isa-toolkit/webapp/__pycache__/
+$FEAR_V_DIR/tools/isa-toolkit/manage.py makemigrations webapp
+$FEAR_V_DIR/tools/isa-toolkit/manage.py migrate
+echo "from django.contrib.auth.models import User; User.objects.filter(username='peer').delete(); User.objects.create_superuser(username='peer', password='bububu11')" | $FEAR_V_DIR/tools/isa-toolkit/manage.py shell
