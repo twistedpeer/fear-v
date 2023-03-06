@@ -15,4 +15,4 @@ rm -rf $FEAR_V_DIR/tools/isa-toolkit/webapp/migrations/*
 rm -rf $FEAR_V_DIR/tools/isa-toolkit/webapp/__pycache__/
 $FEAR_V_DIR/tools/isa-toolkit/manage.py makemigrations webapp
 $FEAR_V_DIR/tools/isa-toolkit/manage.py migrate
-echo "from django.contrib.auth.models import User; User.objects.filter(username='peer').delete(); User.objects.create_superuser(username='peer', password='bububu11')" | $FEAR_V_DIR/tools/isa-toolkit/manage.py shell
+echo "from django.contrib.auth.models import User; User.objects.filter(username='django').delete(); User.objects.create_superuser(username='django', password='django')" | $FEAR_V_DIR/tools/isa-toolkit/manage.py shell
