@@ -7,3 +7,6 @@
 [submodule "tools/fe300-swgen"]
 	path = tools/fe300-swgen
 	url = ../fear-v-fe300-swgen.git
+[submodule "demo"]
+	path = demo
+	url = ../fear-v-demos.git
