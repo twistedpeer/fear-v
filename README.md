@@ -70,7 +70,7 @@ cd ../..
 ```
 
 ## Usage
-In order to use FEAR-V, you need to load some environment variables:
+In order to use FEAR-V, you need to load some environment variables. You can do so by executing the following command:
 ```
 source sourceme.sh
 ```
