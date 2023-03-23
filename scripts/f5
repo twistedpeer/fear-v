@@ -59,8 +59,8 @@ class Settings:
             self.terminator = terminator
 
 class Hardware:
-    def __init__(self, name, core, soc, extra_faults_from_cla, 
-                 max_faults_gpr, max_faults_csr, max_faults_imem, max_faults_coremem, max_faults_ifr,
+    def __init__(self, name, core, soc, cell_layout_analysis,
+                 max_faults_gpr, max_faults_csr, max_faults_imem, max_faults_dmem, max_faults_ifr,
                  settings):
         self.name = name
         self.core = Hardware.Core(**core)
@@ -68,9 +68,9 @@ class Hardware:
         self.max_faults_gpr = max_faults_gpr
         self.max_faults_csr = max_faults_csr
         self.max_faults_imem = max_faults_imem
-        self.max_faults_coremem = max_faults_coremem
+        self.max_faults_dmem = max_faults_dmem
         self.max_faults_ifr = max_faults_ifr
-        self.extra_faults_from_cla = expand_path(extra_faults_from_cla, settings.basedir)
+        self.cell_layout_analysis = expand_path(cell_layout_analysis, settings.basedir)
 
     class Core:
         def __init__(self, subsets, privileged):
@@ -121,17 +121,15 @@ class SoftwareGenerateTorture(SoftwareGenerate):
         self.torture_isa = torture_isa
 
 class Mutants:
-    def __init__(self, gpr, csr, ifr, imem, coremem, with_flip, with_stuckat, with_transient_faults, bits, settings):
-    # def __init__(self, gpr, csr, ifr, imem, coremem, with_flip, with_stuckat, settings):
+    def __init__(self, gpr, csr, ifr, imem, dmem, with_flip, with_stuckat, with_transient_faults, settings):
         self.gpr = gpr
         self.csr = csr
         self.ifr = ifr
         self.imem = imem
-        self.coremem = coremem
+        self.dmem = dmem
         self.with_flip = with_flip
         self.with_stuckat = with_stuckat
         self.with_transient_faults = with_transient_faults
-        # self.bits = bits
 
 def init_architecture(arch, gcc, qemu, basedir):
     if not Architecture.objects.filter(name=arch.name).exists():
@@ -148,9 +146,9 @@ def init_architecture(arch, gcc, qemu, basedir):
             max_faults_gpr=arch.max_faults_gpr,
             max_faults_csr=arch.max_faults_csr,
             max_faults_imem=arch.max_faults_imem,
-            max_faults_coremem=arch.max_faults_coremem,
+            max_faults_coremem=arch.max_faults_dmem,
             max_faults_ifr=arch.max_faults_ifr,
-            extra_faults_from_cla=arch.extra_faults_from_cla)
+            extra_faults_from_cla=arch.cell_layout_analysis)
     else:
         return Architecture.objects.get(name=arch.name)
 
@@ -232,17 +230,15 @@ def parallel_simulate(sw_id):
 
     if y["steps"]["create-mutants"] == True:
         # print("Generating MutantList for '{}'".format(s.name))
-        # print(mutants.extra_faults_from_cla)
         ml = MutantList.objects.create(software=s, 
                                 with_gpr=mutants.gpr,
                                 with_csr=mutants.csr,
                                 with_ifr=mutants.ifr,
                                 with_imem=mutants.imem,
-                                with_coremem=mutants.coremem,
+                                with_coremem=mutants.dmem,
                                 with_flip_faults=mutants.with_flip,
                                 with_stuckat_faults=mutants.with_stuckat,
                                 with_transient_faults=mutants.with_transient_faults)
-                                # bits=mutants.bits)
 
     if y["steps"]["simulate-mutants"] == True:
         ml = s.mutantlist
