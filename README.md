@@ -14,6 +14,7 @@ In order to use FEAR-V, you need to have the following tools available:
 * Build environment with Make and GCC
 * Cmake
 * OpenJDK v8 (for riscv-torture)
+* SiFive riscv-gnu-toolchain (for compilation of FE300 testprograms)
 
 ### Database setup
 
