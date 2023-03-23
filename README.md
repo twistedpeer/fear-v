@@ -75,6 +75,8 @@ In order to use FEAR-V, you need to load some environment variables:
 source sourceme.sh
 ```
 
+After loading the environment variables, the f5 script is ready to execute FEAR-V YAML files. In the directory demos/testsw-297 there are three demos including FEAR-V YAML files. The following section describes how to execute these demos.
+
 ### Demonstration: testsw-297
 This repository comes with three demos that share 297 pre-compiled binary test programs. They demo resides in the following directory:
 ```
