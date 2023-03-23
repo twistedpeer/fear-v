@@ -21,6 +21,8 @@ FEAR-V requires a PostgreSQL database server that is accessible by user "django"
 
 For details how to setup the database server, please refer to the official documentation. A setup guide for Ubuntu can be found here: https://ubuntu.com/server/docs/databases-postgresql
 
+The following page describes how to create a database user: https://www.postgresql.org/docs/8.0/sql-createuser.html
+
 ## Installation
 
 First, you need to setup a python virtualenv:
