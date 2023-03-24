@@ -84,16 +84,30 @@ This repository comes with three demos that share 297 pre-compiled binary test p
 cd demo/testsw-297
 ```
 
+#### Part 1: Permanent Single-Bit Fault Simulation
 The first demo simulates single-bit permanent instruction, GPR and CSR faults. It can be run with:
 ```
 f5 01_permanent_1Bit.yaml
 ```
 
+You can generate an Excel file with the Golden Run Analysis results with the following command:
+```
+./scripts/generate_golden_run_table.py golden_run.xlsx
+```
+The generated Excel file will contain three Workbooks with register, memory and instruction analysis results.
+
+Set-Cover optimization results can be printed with the following command:
+```
+./scripts/print_set_cover_optimization.py
+```
+
+#### Part 2: Transient Single-Bit Fault Simulation
 The second demo simulates single-bit transient GPR faults. It is started with:
 ```
 f5 02_transient_1Bit.yaml
 ```
 
+#### Part 3: Transient N-Bit Fault Simulation
 The third demo simulates 4-bit transient GPR faults. It can be run with:
 ```
 f5 03_transient_4Bit.yaml 
