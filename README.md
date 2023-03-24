@@ -101,6 +101,11 @@ Set-Cover optimization results can be printed with the following command:
 ./scripts/print_set_cover_optimization.py
 ```
 
+To generate an Excel file that contains the permanent fault simulation results, you can run the following script:
+```
+./scripts/generate_permanent_fsim_table.py permanent_fsim.xlsx
+```
+
 #### Part 2: Transient Single-Bit Fault Simulation
 The second demo simulates single-bit transient GPR faults. It is started with:
 ```
