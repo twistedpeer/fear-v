@@ -84,6 +84,8 @@ This repository comes with three demos that share 297 pre-compiled binary test p
 cd demo/testsw-297
 ```
 
+Please note, that all three demos are really large and take between 5 and 20 hours on a 12 core / 24 thread AMD Threadripper PRO machine to finish.
+
 #### Part 1: Permanent Single-Bit Fault Simulation
 The first demo simulates single-bit permanent instruction, GPR and CSR faults. It can be run with:
 ```
