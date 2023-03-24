@@ -118,6 +118,11 @@ To generate an Excel file that contains the transient single-bit fault simulatio
 ./scripts/generate_transient_fsim_table.py transient_fsim_1bit.xlsx
 ```
 
+To generate a CSV file with the GPR coverage score for transient 1-bit fault simulation, you can run the following script (note - this might take some time):
+```
+./scripts/software_gpr_transient_score.py > transient_fsim_1bit_score.csv
+```
+
 #### Part 3: Transient N-Bit Fault Simulation
 The third demo simulates 4-bit transient GPR faults. It can be run with:
 ```
@@ -127,4 +132,9 @@ f5 03_transient_4Bit.yaml
 To generate an Excel file that contains the transient N-bit fault simulation results, you can run the following script:
 ```
 ./scripts/generate_transient_fsim_table.py transient_fsim_4bit.xlsx
+```
+
+To generate a CSV file with the GPR coverage score for transient N-bit fault simulation, you can run the following script (note - this might take some time):
+```
+./scripts/software_gpr_transient_score.py > transient_fsim_4bit_score.csv
 ```
