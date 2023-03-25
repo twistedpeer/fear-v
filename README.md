@@ -16,6 +16,11 @@ In order to use FEAR-V, you need to have the following tools available:
 * OpenJDK v8 (for riscv-torture)
 * SiFive riscv-gnu-toolchain (for compilation of FE300 testprograms)
 
+The following should be sufficient for a fresh Ubuntu 22.04 LTS installation:
+```
+sudo apt install build-essential git python3.10-venv postgresql ninja-build pkg-config libglib2.0-dev libfdt-dev libpixman-1-dev zlib1g-dev ninja-build libxml2-dev cmake openjdk-8-jdk
+```
+
 ### Database setup
 
 FEAR-V requires a PostgreSQL database server that is accessible by user "django" with password "django" that has the right to create/update a database also called "django".
