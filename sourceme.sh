@@ -9,6 +9,9 @@ export PYTHONPATH="$PYTHONPATH:${FEAR_V_DIR}/tools/isa-toolkit"
 # QEMU
 export PATH="${FEAR_V_DIR}/tools/qemu/build/riscv32-softmmu:$PATH"
 
+# CSMITH
+export PATH="${FEAR_V_DIR}/tools/fe300-swgen/work/csmith/bin:$PATH"
+
 # FEAR-V-Scripts
 export PATH="${FEAR_V_DIR}/scripts:$PATH"
 
